@@ -3,16 +3,15 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 
-covid_raw <- read.csv("https://raw.githubusercontent.com/RamiKrispin/coronavirus-csv/master/coronavirus_dataset.csv", stringsAsFactors = FALSE)
+covid_raw <- read.csv("https://covid.ourworldindata.org/data/full_data.csv", stringsAsFactors = FALSE)
 covid_data <- covid_raw %>%
-    group_by(Country.Region, type, date) %>%
-    summarise(daily = sum(cases)) %>%
-    mutate(cumul_freq = cumsum(daily)) %>%
+    rename(Country.Region = location) %>%
     mutate(date = ymd(date))
     
 country <- unique(covid_data$Country.Region)
 earliest_date <- min(covid_data$date)
 latest_date <- max(covid_data$date)
+data_source <- "Data from https://ourworldindata.org/coronavirus-source-data"
 
 # Define UI for application that draws a histogram
 ui <- fluidPage(
@@ -33,9 +32,9 @@ ui <- fluidPage(
             dateRangeInput("date_select", "Select date range", 
                            start = earliest_date, end = latest_date, 
                            min = earliest_date, max = latest_date),
-            a(href = "https://github.com/CSSEGISandData/COVID-19", "Data is maintained by the Center for Systems Science and Engineering (CSSE) at Johns Hopkins University."),
-            p(""),
-            a(href = "https://ramikrispin.github.io/coronavirus/", "Thanks to Rami Krispin for parsing the data into a tidy format.")
+            p("NB: This site previously used the data maintained by the Johns Hopkins Coronavirus Resource Center, but has recently been changed to a different source."),
+            a(href = "https://ourworldindata.org/coronavirus-source-data", "Data is maintained by Our World in Data (as of 2020-03-18)."),
+            p(href = "https://github.com/dannyjnwong/COVID", "Code for the app is available here: https://github.com/dannyjnwong/COVID")
             
         ),
         
@@ -72,15 +71,15 @@ ui <- fluidPage(
 server <- function(input, output) {
     
     output$Cases <- renderPlot({
-        covid_data %>% filter(type == "confirmed") %>%
+        covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
             filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
-            ggplot(aes(x = date, y = cumul_freq, col = Country.Region)) + 
+            ggplot(aes(x = date, y = total_cases, col = Country.Region)) + 
             geom_line() +
             labs(x = "Date", 
                  y = "Cases",
                  title = "Cumulative frequency of confirmed cases",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 subtitle = data_source,
                  col = "Country") +
             scale_x_date(labels = scales::date_format("%d-%m-%Y")) +
             theme_bw() +
@@ -89,15 +88,15 @@ server <- function(input, output) {
     })
     
     output$Deaths <- renderPlot({
-        covid_data %>% filter(type == "death") %>%
+        covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
             filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
-            ggplot(aes(x = date, y = cumul_freq, col = Country.Region)) + 
+            ggplot(aes(x = date, y = total_deaths, col = Country.Region)) + 
             geom_line() +
             labs(x = "Date", 
                  y = "Cases",
                  title = "Cumulative deaths",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 subtitle = data_source,
                  col = "Country") +
             scale_x_date(labels = scales::date_format("%d-%m-%Y")) +
             theme_bw() +
@@ -108,33 +107,32 @@ server <- function(input, output) {
     output$Summary <- renderTable({
         covid_data %>% filter(Country.Region %in% input$country_select) %>%
             rename(Country = Country.Region) %>%
-            filter(type == "confirmed") %>%
             group_by(Country) %>%
-            summarise(`Current confirmed cases` = max(cumul_freq),
-                      `Highest single day rise` = max(daily)) -> confirmed_cases
+            summarise(`Current confirmed cases` = max(total_cases, na.rm = TRUE),
+                      `Highest single day rise` = max(new_cases, na.rm = TRUE)) -> confirmed_cases
         
         covid_data %>% filter(Country.Region %in% input$country_select) %>%
             rename(Country = Country.Region) %>%
-            filter(type == "death") %>%
             group_by(Country) %>%
-            summarise(`Current deaths` = max(cumul_freq)) -> confirmed_deaths
+            summarise(`Highest single day deaths` = max(new_deaths, na.rm = TRUE),
+                      `Current deaths` = max(total_deaths, na.rm = TRUE)) -> confirmed_deaths
         tbl <- left_join(confirmed_cases, confirmed_deaths, by = "Country") %>%
             arrange(desc(`Current confirmed cases`))
         tbl
     })
     
     output$OffsetCases <- renderPlot({
-        covid_data %>% filter(type == "confirmed") %>%
+        covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
-            filter(cumul_freq >= input$offset_value) %>% 
+            filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
-            mutate(Days = seq(from = 1, to = n())) %>%
-            ggplot(aes(x = Days, y = cumul_freq, group = Country.Region)) + 
+            mutate(Days = seq(from = 0, to = n()-1)) %>%
+            ggplot(aes(x = Days, y = total_cases, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
             labs(x = paste("Day number since", input$offset_value, "cumulative cases"), 
                  y = "Cases",
                  title = "Cumulative frequency of confirmed cases with date offset",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 subtitle = data_source,
                  col = "Country",
                  linetype = "Country") +
             theme_bw() +
@@ -142,17 +140,17 @@ server <- function(input, output) {
     })
     
     output$LogOffsetCases <- renderPlot({
-        covid_data %>% filter(type == "confirmed") %>%
+        covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
-            filter(cumul_freq >= input$offset_value) %>% 
+            filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
-            mutate(Days = seq(from = 1, to = n())) %>%
-            ggplot(aes(x = Days, y = cumul_freq, group = Country.Region)) + 
+            mutate(Days = seq(from = 0, to = n()-1)) %>%
+            ggplot(aes(x = Days, y = total_cases, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
             labs(x = paste("Day number since", input$offset_value, "cumulative cases"), 
                  y = "Cases",
                  title = "Cumulative frequency of confirmed cases with date offset (log scale)",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 subtitle = data_source,
                  col = "Country",
                  linetype = "Country") +
             scale_y_continuous(trans = "log10") +
@@ -161,17 +159,17 @@ server <- function(input, output) {
     })
     
     output$OffsetDeaths <- renderPlot({
-        covid_data %>% filter(type == "confirmed") %>%
+        covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
-            filter(cumul_freq >= input$offset_deaths_value) %>% 
+            filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
-            mutate(Days = seq(from = 1, to = n())) %>%
-            ggplot(aes(x = Days, y = cumul_freq, group = Country.Region)) + 
+            mutate(Days = seq(from = 0, to = n()-1)) %>%
+            ggplot(aes(x = Days, y = total_deaths, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
-            labs(x = paste("Day number since", input$offset_value, "cumulative cases"), 
+            labs(x = paste("Day number since", input$offset_value, "cumulative deaths"), 
                  y = "Deaths",
-                 title = "Cumulative frequency of confirmed deaths with date offset",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 title = "Cumulative frequency of deaths with date offset",
+                 subtitle = data_source,
                  col = "Country",
                  linetype = "Country") +
             theme_bw() +
@@ -179,17 +177,17 @@ server <- function(input, output) {
     })
     
     output$LogOffsetDeaths <- renderPlot({
-        covid_data %>% filter(type == "confirmed") %>%
+        covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
-            filter(cumul_freq >= input$offset_deaths_value) %>% 
+            filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
-            mutate(Days = seq(from = 1, to = n())) %>%
-            ggplot(aes(x = Days, y = cumul_freq, group = Country.Region)) + 
+            mutate(Days = seq(from = 0, to = n()-1)) %>%
+            ggplot(aes(x = Days, y = total_deaths, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
-            labs(x = paste("Day number since", input$offset_value, "cumulative cases"), 
+            labs(x = paste("Day number since", input$offset_value, "cumulative deaths"), 
                  y = "Deaths",
-                 title = "Cumulative frequency of confirmed cases with date offset (log scale)",
-                 subtitle = "Data from the 2019 Novel Coronavirus Visual Dashboard\nJohns Hopkins University Center for Systems Science and Engineering (JHU CSSE)",
+                 title = "Cumulative frequency of deaths with date offset (log scale)",
+                 subtitle = data_source,
                  col = "Country",
                  linetype = "Country") +
             scale_y_continuous(trans = "log10") +
