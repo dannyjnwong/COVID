@@ -48,7 +48,7 @@ ui <- fluidPage(
                         tabPanel("Summary", 
                                  tableOutput("Summary")),
                         tabPanel("Offset Dates (Cases)", 
-                                 sliderInput("offset_value", "Select minimum case number corresponding to Day 1", 
+                                 sliderInput("offset_value", "Select minimum case number corresponding to Day 0", 
                                              min = 10, max = 500,
                                              value = 50,
                                              round = TRUE, 
@@ -56,7 +56,7 @@ ui <- fluidPage(
                                  plotOutput("OffsetCases"), 
                                  plotOutput("LogOffsetCases")),
                         tabPanel("Offset Dates (Deaths)", 
-                                 sliderInput("offset_deaths_value", "Select minimum cumulative deaths corresponding to Day 1", 
+                                 sliderInput("offset_deaths_value", "Select minimum cumulative deaths corresponding to Day 0", 
                                              min = 00, max = 500,
                                              value = 10,
                                              round = TRUE, 
@@ -167,7 +167,7 @@ server <- function(input, output) {
             mutate(Days = seq(from = 0, to = n()-1)) %>%
             ggplot(aes(x = Days, y = total_deaths, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
-            labs(x = paste("Day number since", input$offset_value, "cumulative deaths"), 
+            labs(x = paste("Day number since", input$offset_deaths_value, "cumulative deaths"), 
                  y = "Deaths",
                  title = "Cumulative frequency of deaths with date offset",
                  subtitle = data_source,
@@ -185,7 +185,7 @@ server <- function(input, output) {
             mutate(Days = seq(from = 0, to = n()-1)) %>%
             ggplot(aes(x = Days, y = total_deaths, group = Country.Region)) + 
             geom_line(aes(linetype = Country.Region, col = Country.Region)) +
-            labs(x = paste("Day number since", input$offset_value, "cumulative deaths"), 
+            labs(x = paste("Day number since", input$offset_deaths_value, "cumulative deaths"), 
                  y = "Deaths",
                  title = "Cumulative frequency of deaths with date offset (log scale)",
                  subtitle = data_source,
