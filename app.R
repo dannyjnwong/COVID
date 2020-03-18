@@ -34,6 +34,7 @@ ui <- fluidPage(
                            min = earliest_date, max = latest_date),
             p("NB: This site previously used the data maintained by the Johns Hopkins Coronavirus Resource Center, but has recently been changed to a different source."),
             a(href = "https://ourworldindata.org/coronavirus-source-data", "Data is maintained by Our World in Data (as of 2020-03-18)."),
+            p(""),
             a(href = "https://github.com/dannyjnwong/COVID", "Code for the app is available here: https://github.com/dannyjnwong/COVID")
             
         ),
