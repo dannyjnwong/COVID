@@ -3,6 +3,7 @@ library(dplyr)
 library(ggplot2)
 library(lubridate)
 library(scales)
+library(broom)
 
 population <- read.csv("data/population.csv", skip = 4, stringsAsFactors = FALSE) %>%
     rename(Country.Region = Country.Name) %>%
@@ -124,7 +125,10 @@ ui <- fluidPage(
                                  p("The following plots have been adjusted for population size in each country."),
                                  a(href = "https://data.worldbank.org/", "Population data from the World Bank."),
                                  #plotOutput("ForecastCasesPerCapita"),
-                                 plotOutput("ForecastDeathsPerCapita"))
+                                 plotOutput("ForecastDeathsPerCapita"),
+                                 hr(),
+                                 h2("Estimated daily rates of increment"),
+                                 tableOutput("ModelsSummary"))
             )
         )
     )
@@ -406,6 +410,64 @@ server <- function(input, output) {
             scale_colour_brewer(palette = "Set1") +
             theme_bw() +
             theme(legend.position="bottom")
+    })
+    
+    output$ModelsSummary <- renderTable({
+        
+        # Create a subset of data for modelling
+        covid_death_subset <- covid_data %>% 
+            filter(Country.Region %in% input$country_select) %>%
+            filter(total_deaths >= input$offset_deaths_value) %>% 
+            mutate(log_deaths = log(total_deaths, base = 10)) %>%
+            mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
+            filter(total_deaths >= 10 & total_cases >= 100) %>%
+            group_by(Country.Region) %>% 
+            mutate(Days = seq(from = 0, to = n()-1))
+        
+        covid_cases_subset <- covid_data %>% 
+            filter(Country.Region %in% input$country_select) %>%
+            filter(total_deaths >= input$offset_deaths_value) %>% 
+            mutate(log_cases = log(total_cases, base = 10)) %>%
+            mutate(log_cases_per_capita = log(cases_per_capita, base = 10)) %>%
+            filter(total_deaths >= 10 & total_cases >= 100) %>%
+            group_by(Country.Region) %>% 
+            mutate(Days = seq(from = 0, to = n()-1))
+        
+        fitted_models_deaths <- covid_death_subset %>% 
+            group_by(Country.Region) %>% 
+            do(model = lm(log_deaths ~ Days, data = .))
+        
+        fitted_models_deaths_per_capita <- covid_death_subset %>% 
+            group_by(Country.Region) %>% 
+            do(model = lm(log_deaths_per_capita ~ Days, data = .))
+        
+        fitted_models_cases <- covid_cases_subset %>% 
+            group_by(Country.Region) %>% 
+            do(model = lm(log_cases ~ Days, data = .))
+        
+        fitted_models_cases_per_capita <- covid_cases_subset %>% 
+            group_by(Country.Region) %>% 
+            do(model = lm(log_cases_per_capita ~ Days, data = .))
+        
+        tbla <- fitted_models_deaths_per_capita %>% 
+            tidy(model) %>% 
+            filter(term == "Days") %>%
+            mutate(daily_multiplier = 10^estimate) %>%
+            mutate(daily_inc_percent = (daily_multiplier - 1) * 100) %>%
+            select(`Daily increases in Deaths per 100,000 population (%)` = daily_inc_percent)
+        
+        tblb <- fitted_models_cases_per_capita %>% 
+            tidy(model) %>% 
+            filter(term == "Days") %>% 
+            mutate(daily_multiplier = 10^estimate) %>%
+            mutate(daily_inc_percent = (daily_multiplier - 1) * 100) %>%
+            select(`Daily increases in Cases per 100,000 population (%)` = daily_inc_percent)
+        
+        results_table <- left_join(tbla, tblb, by = "Country.Region") %>%
+            arrange(desc(`Daily increases in Deaths per 100,000 population (%)`)) %>%
+            rename(Country = Country.Region)
+        
+        results_table
     })
 }
 
