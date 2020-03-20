@@ -55,14 +55,17 @@ We would like to see what the mortality might be going forward. We can do a log 
 
 ```{r echo=FALSE}
 # Countries similar to UK
-UK_similar <- c("France", "Italy", "South Korea", "United Kingdom", "Portugal", "Spain", "Germany", "Switzerland", "United States")
+#UK_similar <- c("France", "Italy", "South Korea", "United Kingdom", "Portugal", "Spain", "Germany", "Switzerland", "United States")
+
+#G8 Countries
+G8 <- c("France", "Germany", "Italy", "Japan", "United Kingdom", "United States")
 
 # Create a subset of the data of the UK similar countries, and then align their dates, 
 # such that Day 0 is the first day they reported at least 10 deaths
 # Also create a log-transformed variable for deaths and a variable for Days since 10 deaths
 # Days will be the relative timing variable
 covid_data_subset <- covid_data %>% 
-  filter(Country.Region %in% UK_similar) %>%
+  filter(Country.Region %in% G8) %>%
   mutate(log_deaths = log(total_deaths, base = 10)) %>%
   mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
   filter(total_deaths >= 10) %>%
@@ -71,7 +74,7 @@ covid_data_subset <- covid_data %>%
 
 # Create a similar subset of cases >= 100.
 covid_cases_subset <- covid_data %>% 
-  filter(Country.Region %in% UK_similar) %>%
+  filter(Country.Region %in% G8) %>%
   mutate(log_cases = log(total_cases, base = 10)) %>%
   mutate(log_cases_per_capita = log(cases_per_capita, base = 10)) %>%
   filter(total_cases >= 100) %>%
@@ -120,7 +123,7 @@ Now we can plot the data and the models.
 covid_data_subset %>%
   ggplot(aes(x = Days, y = total_deaths, col = Country.Region)) + 
             geom_point() +
-            geom_smooth(method = "lm", fullrange = TRUE) +
+            geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
             labs(x = paste("Day number since 10 cumulative deaths"), 
                  y = "Deaths",
                  title = "Forecasted deaths with date offset",
@@ -159,9 +162,9 @@ ggsave("../plots/figure2.pdf", dpi = 300, width = 12, height = 8)
 covid_data_subset %>%
   ggplot(aes(x = Days, y = total_cases, col = Country.Region)) + 
             geom_point() +
-            geom_smooth(method = "lm", fullrange = TRUE) +
+            geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
             labs(x = paste("Day number since 100 cumulative cases"), 
-                 y = "Deaths",
+                 y = "Cases",
                  title = "Forecasted cases with date offset",
                  subtitle = data_source,
                  col = "Country") +
@@ -180,7 +183,7 @@ covid_data_subset %>%
   geom_point() +
   geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
   labs(x = paste("Day number since 100 cumulative cases"), 
-       y = "Deaths per 100,000 population",
+       y = "Cases per 100,000 population",
        title = "Forecasted cases with date offset (log scale)",
        subtitle = data_source,
        col = "Country",
