@@ -207,12 +207,14 @@ server <- function(input, output) {
     
     output$Summary <- renderTable({
         covid_data %>% filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             rename(Country = Country.Region) %>%
             group_by(Country) %>%
             summarise(`Current confirmed cases` = max(total_cases, na.rm = TRUE),
                       `Highest single day rise` = max(new_cases, na.rm = TRUE)) -> confirmed_cases
         
         covid_data %>% filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             rename(Country = Country.Region) %>%
             group_by(Country) %>%
             summarise(`Highest single day deaths` = max(new_deaths, na.rm = TRUE),
@@ -225,6 +227,7 @@ server <- function(input, output) {
     output$OffsetCases <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -243,6 +246,7 @@ server <- function(input, output) {
     output$LogOffsetCases <- renderPlot({
         covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -262,6 +266,7 @@ server <- function(input, output) {
     output$OffsetCasesPerCapita <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -280,6 +285,7 @@ server <- function(input, output) {
     output$LogOffsetCasesPerCapita <- renderPlot({
         covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_cases >= input$offset_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -299,6 +305,7 @@ server <- function(input, output) {
     output$OffsetDeaths <- renderPlot({
         covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -317,6 +324,7 @@ server <- function(input, output) {
     output$LogOffsetDeaths <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -336,6 +344,7 @@ server <- function(input, output) {
     output$OffsetDeathsPerCapita <- renderPlot({
         covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -354,6 +363,7 @@ server <- function(input, output) {
     output$LogOffsetDeathsPerCapita <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -374,6 +384,7 @@ server <- function(input, output) {
     output$ForecastDeaths <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_forecast_deaths_value) %>%
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -394,6 +405,7 @@ server <- function(input, output) {
     output$ForecastDeathsPerCapita <- renderPlot({
         covid_data %>%
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_forecast_deaths_value) %>%
             group_by(Country.Region) %>% 
             mutate(Days = seq(from = 0, to = n()-1)) %>%
@@ -417,6 +429,7 @@ server <- function(input, output) {
         # Create a subset of data for modelling
         covid_death_subset <- covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             mutate(log_deaths = log(total_deaths, base = 10)) %>%
             mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
@@ -426,6 +439,7 @@ server <- function(input, output) {
         
         covid_cases_subset <- covid_data %>% 
             filter(Country.Region %in% input$country_select) %>%
+            filter(date >= input$date_select[1], date <= input$date_select[2]) %>%
             filter(total_deaths >= input$offset_deaths_value) %>% 
             mutate(log_cases = log(total_cases, base = 10)) %>%
             mutate(log_cases_per_capita = log(cases_per_capita, base = 10)) %>%
