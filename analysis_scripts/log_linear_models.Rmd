@@ -61,27 +61,30 @@ We would like to see what the mortality might be going forward. We can do a log 
 ```{r echo=FALSE}
 #G7 Countries
 G7 <- c("France", "Germany", "Italy", "Japan", "United Kingdom", "United States", "Canada")
+G7_China <- c(G7, "China")
 
 # Create a subset of the data of the UK similar countries, and then align their dates, 
 # such that Day 0 is the first day they reported at least 10 deaths
 # Also create a log-transformed variable for deaths and a variable for Days since 10 deaths
 # Days will be the relative timing variable
 covid_data_subset <- covid_data %>% 
-  filter(Country.Region %in% G7) %>%
+  filter(Country.Region %in% G7_China) %>%
   mutate(log_deaths = log(total_deaths, base = 10)) %>%
   mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
   filter(total_deaths >= 10 & total_cases >= 100) %>%
   group_by(Country.Region) %>% 
-  mutate(Days = seq(from = 0, to = n()-1))
+  mutate(Days = seq(from = 0, to = n()-1)) %>%
+  filter(Days >= 0 & Days <= 21) #Select the first 21 days
 
 # Create a similar subset of cases >= 100.
 covid_cases_subset <- covid_data %>% 
-  filter(Country.Region %in% G7) %>%
+  filter(Country.Region %in% G7_China) %>%
   mutate(log_cases = log(total_cases, base = 10)) %>%
   mutate(log_cases_per_capita = log(cases_per_capita, base = 10)) %>%
   filter(total_deaths >= 10 & total_cases >= 100) %>%
   group_by(Country.Region) %>% 
-  mutate(Days = seq(from = 0, to = n()-1))
+  mutate(Days = seq(from = 0, to = n()-1)) %>%
+  filter(Days >= 0 & Days <= 21) #Select the first 21 days
 
 # Fit the models for deaths
 fitted_models_deaths <- covid_data_subset %>% 
@@ -199,6 +202,27 @@ covid_cases_subset %>%
         axis.title.y = element_text(size = 14, face = "bold"),
         plot.title = element_text(size = 16, face = "bold"))
 ggsave("../plots/figure4.pdf", dpi = 300, width = 12, height = 8, device = cairo_pdf)
+```
+
+### Deaths per capita UK, Italy and China
+
+```{r plot_deaths_per_capita_China, echo=FALSE, message=FALSE, warning=FALSE, dpi=300, height=8, width=12}
+covid_data_subset %>% filter(Country.Region %in% c("Italy", "China", "United Kingdom")) %>%
+  ggplot(aes(x = Days, y = deaths_per_capita, col = Country.Region)) + 
+  geom_point() +
+  geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
+  labs(x = paste("Day number since 10 cumulative deaths"), 
+       y = "Deaths per 100,000 population",
+       title = "Deaths per capita over time",
+       col = "Country",
+       linetype = "Country") +
+  scale_y_continuous(trans = "log10", labels = scales::comma_format(accuracy = 0.01)) +
+  theme_bw() +
+  theme(legend.position="bottom") +
+  theme(axis.title.x = element_text(size = 14, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+ggsave("../plots/figure5.pdf", dpi = 300, width = 12, height = 8, device = cairo_pdf)
 ```
 
 ### Result Table
