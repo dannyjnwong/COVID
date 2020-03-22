@@ -1,0 +1,291 @@
+---
+title: "Mortality from COVID"
+author: "Danny Wong, Zachary J. Ward"
+date: "21/03/2020"
+output:
+  word_document: default
+  pdf_document: default
+  html_document:
+    df_print: paged
+---
+
+```{r setup, include=FALSE}
+library(dplyr)
+library(ggplot2)
+library(lubridate)
+library(scales)
+library(broom)
+library(pander)
+panderOptions('table.split.table', Inf)
+
+population <- read.csv("../data/population.csv", skip = 4, stringsAsFactors = FALSE) %>%
+  rename(Country.Region = Country.Name) %>%
+  mutate(Country.Region = recode(Country.Region, `Bahamas, The` = "Bahamas",
+                                 `Brunei Darussalam` = "Brunei",
+                                 `Congo, Rep.` = "Congo",
+                                 `Congo, Dem. Rep.` = "Democratic Republic of Congo",
+                                 `Egypt, Arab Rep.` = "Egypt",
+                                 `Eswatini` = "Swaziland",
+                                 `Faroe Islands` = "Faeroe Islands",
+                                 `Iran, Islamic Rep.` = "Iran",
+                                 `North Macedonia` = "Macedonia",
+                                 `Korea, Rep.` = "South Korea",
+                                 `Russian Federation` = "Russia",
+                                 `St. Lucia` = "Saint Lucia",
+                                 `St. Martin (French part)` = "Saint Martin (French part)",
+                                 `St. Vincent and the Grenadines` = "Saint Vincent and the Grenadines",
+                                 `Slovak Republic` = "Slovakia",
+                                 `Virgin Islands (U.S.)` = "United States Virgin Islands",
+                                 `Venezuela, RB` = "Venezuela")) %>%
+  select(Country.Region, popn = X2018)
+
+covid_raw <- read.csv("https://covid.ourworldindata.org/data/ecdc/full_data.csv", stringsAsFactors = FALSE)
+covid_data <- covid_raw %>%
+  rename(Country.Region = location) %>%
+  mutate(date = ymd(date)) %>%
+  filter(date <= ymd("2020-03-21")) %>%
+  left_join(population, by = "Country.Region") %>%
+  mutate(cases_per_capita = total_cases/popn * 100000) %>%
+  mutate(deaths_per_capita = total_deaths/popn * 100000)
+
+country <- unique(covid_data$Country.Region)
+earliest_date <- min(covid_data$date)
+latest_date <- max(covid_data$date)
+data_source <- "Data from https://ourworldindata.org/coronavirus-source-data"
+
+#get total deaths in G7
+G7 <- c("France", "Italy", "Japan", "United Kingdom", "United States", "Canada", "Germany")
+data_G7 <- subset(covid_data,Country.Region %in% G7)
+deaths <- c()
+for(g in 1:7){
+  deaths[g] <- max(data_G7$total_deaths[data_G7$Country.Region == G7[g]])
+}
+print(paste0("G7 Deaths: ", sum(deaths)))
+```
+
+## Mortality Models from COVID-19
+
+`r print(data_source)`
+
+We would like to see what the mortality might be going forward. We can do a log transformation of the total deaths and regress against the Days since 10 deaths.
+
+```{r echo=FALSE}
+#G7 Countries
+G7 <- c("France","Italy", "Japan", "United Kingdom", "United States")  # Exclude Canada and Germany
+
+# Create a subset of the data of the UK similar countries, and then align their dates, 
+# such that Day 0 is the first day they reported at least 10 deaths
+# Also create a log-transformed variable for deaths and a variable for Days since 10 deaths
+# Days will be the relative timing variable
+timePeriod <- 24 #24 days
+
+covid_data_subset <- covid_data %>% 
+  filter(Country.Region %in% G7) %>%
+  mutate(log_deaths = log(total_deaths, base = 10)) %>%
+  mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
+  filter(total_deaths >= 10) %>%
+  group_by(Country.Region) %>% 
+  mutate(Days = seq(from = 0, to = n()-1)) %>%
+  filter(Days >= 0 & Days <= timePeriod) #Select the first X days
+
+# Fit the models for deaths
+fitted_models_deaths <- covid_data_subset %>% 
+  group_by(Country.Region) %>% 
+  do(model = lm(log_deaths ~ Days, data = .))
+
+fitted_models_deaths_per_capita <- covid_data_subset %>% 
+  group_by(Country.Region) %>% 
+  do(model = lm(log_deaths_per_capita ~ Days, data = .))
+```
+
+### Deaths
+
+```{r plot_deaths, echo=FALSE, message=FALSE, warning=FALSE, dpi=300, height=8, width=12}
+covid_data_subset %>%
+  ggplot(aes(x = Days, y = total_deaths, col = Country.Region)) + 
+  geom_point(alpha = 0.8) +
+  geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
+  labs(x = paste("Day number since 10 cumulative deaths"), 
+       y = "Deaths",
+       title = "Crude mortalities over time",
+       col = "Country") +
+  scale_y_continuous(trans = "log10", labels = scales::comma_format()) +
+  annotation_logticks(sides = "l") +
+  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")) +
+  theme_bw() +
+  theme(legend.position="bottom") +
+  theme(axis.title.x = element_text(size = 14, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+ggsave("../plots/total_deaths.pdf", dpi = 300, width = 12, height = 8, device = cairo_pdf)
+```
+
+### Deaths Per 100,000 Population
+
+```{r plot_deaths_per_capita, echo=FALSE, message=FALSE, warning=FALSE, dpi=300, height=8, width=12}
+covid_data_subset %>%
+  ggplot(aes(x = Days, y = deaths_per_capita, col = Country.Region)) + 
+  geom_point() +
+  geom_smooth(method = "lm", fullrange = TRUE, size = 0.5) +
+  labs(x = paste("Day number since 10 cumulative deaths"), 
+       y = "Deaths per 100,000 population",
+       title = "Crude COVID-19 mortalities over time",
+       col = "Country",
+       linetype = "Country") +
+  scale_y_continuous(trans = "log10", labels = scales::comma_format(accuracy = 0.01)) +
+  annotation_logticks(sides = "l") +
+  theme_bw() +
+  theme(legend.position="bottom") +
+  scale_colour_manual(values = c("#1b9e77", "#d95f02", "#7570b3", "#e7298a", "#66a61e")) +
+  guides(color = guide_legend(override.aes = list(fill = NA))) +
+  theme(axis.title.x = element_text(size = 14, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+ggsave("../plots/deaths_per_capita.pdf", dpi = 300, width = 12, height = 8, device = cairo_pdf)
+```
+
+### Models
+
+```{r echo=FALSE}
+fitted_models_deaths_per_capita %>% tidy(model) %>% pander::pander("Coefficients of linear regression models for log(DEATHS_PER_CAPITA) against Days since 10 deaths.")
+fitted_models_deaths_per_capita %>% glance(model) %>% pander::pander("Fit statistics of linear regression models for log(DEATHS_PER_CAPITA) against DAYS since 10 deaths.")
+```
+
+### Mortality Trajectories
+
+```{r message=FALSE, warning=FALSE, include=FALSE}
+# This was a check of the models by Zach
+# italy
+check_ITA <- subset(covid_data,Country.Region == "Italy" & total_deaths >= 10)
+check_ITA$Days <- 0:(nrow(check_ITA)-1)
+check_ITA$log_Deaths <- log(check_ITA$deaths_per_capita, base = 10)
+trunc_ITA <- subset(check_ITA, Days < 9)
+fit_ITA <- lm(log_Deaths ~ Days, data = trunc_ITA)
+pred_ITA <- predict(fit_ITA, newdata = data.frame(Days = 0:24),interval = 'confidence')
+
+# china
+check_CHN <- subset(covid_data,Country.Region == "China" & total_deaths >= 10)
+check_CHN$Days <- 0:(nrow(check_CHN) - 1)
+check_CHN$log_Deaths <- log(check_CHN$deaths_per_capita, base = 10)
+trunc_CHN <- subset(check_CHN,Days < 9)
+fit_CHN <- lm(log_Deaths ~ Days, data = trunc_CHN)
+pred_CHN <- predict(fit_CHN, newdata = data.frame(Days = 0:24), interval = 'confidence')
+
+#uk
+uk <- subset(covid_data, Country.Region == "United Kingdom" & total_deaths >= 10)
+uk$Days <- 0:(nrow(uk) - 1)
+uk$log_Deaths <- log(uk$deaths_per_capita, base = 10)
+fit_UK <- lm(log_Deaths~Days, data = uk)
+pred_UK <- predict(fit_UK,newdata = data.frame(Days = 0:24), interval = 'confidence')
+
+plot(check_ITA$Days,check_ITA$log_Deaths, col = 'darkgreen', ylim = c(-3, 2.5), yaxt = 'n',ylab = "Deaths per 100,000 population",
+     xlab = "Day number since 10 cumulative deaths")
+axis(2, at = seq(-3, 2.5, 0.5), labels = 10^seq(-3, 2.5, 0.5))
+points(trunc_ITA$Days, trunc_ITA$log_Deaths, pch = 20, col = 'darkgreen')
+lines(0:24, pred_ITA[, 1], col = 'darkgreen')
+polygon(c(rev(0:24), 0:24), c(rev(pred_ITA[, 3]), pred_ITA[,2]), col = rgb(0, 0.5, 0, 0.1), border = NA)
+
+#china
+points(check_CHN$Days, check_CHN$log_Deaths, col = 'darkred')
+points(trunc_CHN$Days, trunc_CHN$log_Deaths, pch = 20, col = 'darkred')
+lines(0:24, pred_CHN[, 1], col = 'darkred')
+polygon(c(rev(0:24), 0:24), c(rev(pred_CHN[, 3]), pred_CHN[, 2]), col = rgb(0.5, 0, 0, 0.1), border = NA)
+
+#uk
+points(uk$Days, uk$log_Deaths, pch = 20, col = 'darkblue')
+lines(0:24, pred_UK[, 1], col = 'darkblue')
+polygon(c(rev(0:24), 0:24), c(rev(pred_UK[, 3]), pred_UK[, 2]), col = rgb(0, 0, 0.5, 0.1), border = NA)
+legend('topleft',c("Italy", "China", "UK"),lty = c(1, 1, 1),col = c('darkgreen', 'darkred', 'darkblue'),inset = 0.01)
+abline(v= 8.5,lty = 2)
+```
+
+### Deaths Per 100,000 Population
+
+```{r plot_China_Italy_UK, echo=FALSE, message=FALSE, warning=FALSE, dpi=300, height=8, width=12}
+# Replot Zach's plot using ggplot2 to match previous plot
+ChItUK <- covid_data %>% 
+  filter(Country.Region %in% c("China", "Italy", "United Kingdom")) %>%
+  mutate(log_deaths = log(total_deaths, base = 10)) %>%
+  mutate(log_deaths_per_capita = log(deaths_per_capita, base = 10)) %>%
+  filter(total_deaths >= 10) %>%
+  group_by(Country.Region) %>% 
+  mutate(Days = seq(from = 0, to = n()-1)) %>%
+  filter(Days >= 0 & Days <= timePeriod)
+
+pred_CHN <- data.frame(pred_CHN, Country.Region = "China", Days = 0:24)
+pred_ITA <- data.frame(pred_ITA, Country.Region = "Italy", Days = 0:24)
+pred_UK <- data.frame(pred_UK, Country.Region = "United Kingdom", Days = 0:24)
+predictions <- rbind(pred_CHN, pred_ITA, pred_UK)
+predictions <- predictions %>%
+  mutate_at(.funs = funs(10^.), .vars = vars(fit, lwr, upr))
+
+ChItUK %>% ggplot(aes(x = Days)) + 
+  geom_point(aes(y = deaths_per_capita, col = Country.Region), shape = 1) +
+  geom_point(data = ChItUK %>% filter(Days <= 8),aes(y = deaths_per_capita, col = Country.Region)) +
+  geom_ribbon(data = predictions, aes(ymin = lwr, ymax = upr, group = Country.Region), alpha = 0.2) +
+  geom_line(data = predictions, aes(y = fit, col = Country.Region)) +
+  geom_vline(linetype = "dashed", xintercept = 8.5) +
+  labs(x = paste("Day number since 10 cumulative deaths"), 
+       y = "Deaths per 100,000 population",
+       title = "Crude COVID-19 mortalities in China, Italy & UK",
+       col = "Country",
+       fill = "Country",
+       linetype = "Country") +
+  scale_y_continuous(trans = "log10", labels = scales::comma_format(accuracy = 0.01)) +
+  annotation_logticks(sides = "l") +
+  theme_bw() +
+  theme(legend.position="bottom") +
+  scale_colour_brewer(palette = "Set1") +
+  theme(axis.title.x = element_text(size = 14, face = "bold"),
+        axis.title.y = element_text(size = 14, face = "bold"),
+        plot.title = element_text(size = 16, face = "bold"))
+ggsave("../plots/China_Italy_UK.pdf", dpi = 300, width = 12, height = 8, device = cairo_pdf)
+```
+
+### Result Table
+
+```{r echo=FALSE, message=FALSE, warning=FALSE}
+a <- fitted_models_deaths_per_capita %>% 
+  tidy(model) %>% 
+  filter(term == "Days") %>%
+  mutate(lwr = estimate - (1.96 * std.error)) %>%
+  mutate(upr = estimate + (1.96 * std.error)) %>%
+  mutate(daily_multiplier = 10^estimate) %>%
+  mutate(daily_inc_percent = (daily_multiplier - 1) * 100) %>%
+  mutate(daily_multiplier_lwr = 10^lwr) %>%
+  mutate(daily_inc_percent_lwr = (daily_multiplier_lwr - 1) * 100) %>%
+  mutate(daily_multiplier_upr = 10^upr) %>%
+  mutate(daily_inc_percent_upr = (daily_multiplier_upr - 1) * 100) %>%
+  mutate(ci = paste0(round(daily_inc_percent_lwr, digits = 1), "-", round(daily_inc_percent_upr, digits = 1))) %>%
+  select(`Daily increases in Deaths per 100,000 population (%)` = daily_inc_percent,
+         `Deaths (95% CI)` = ci)
+
+predict_model <- function (dat = covid_data_subset, country, d) {
+  require(dplyr)
+  lm(log_deaths_per_capita ~ Days, data = filter(dat, Country.Region == country)) %>%
+      predict(., newdata = data.frame(Days = d), interval = "confidence") %>%
+    broom::tidy()
+}
+
+results_table_a <- a %>%
+  arrange(desc(`Daily increases in Deaths per 100,000 population (%)`))
+
+b <- rbind(predict_model(country = "United Kingdom", d = 24)) %>%
+  rbind(predict_model(country = "France", d = 24)) %>%
+  rbind(c(NA, NA, NA)) %>%
+  rbind(predict_model(country = "United States", d = 24)) %>%
+  rbind(predict_model(country = "Japan", d = 24))
+
+results_table_b <- b %>%
+  mutate(fit = 10^(fit)) %>%
+  mutate(lwr = 10^(lwr)) %>%
+  mutate(upr = 10^(upr)) 
+
+results_table <- bind_cols(results_table_a, results_table_b) %>%
+  mutate(ci = paste0(round(lwr, digits = 1), "-", round(upr, digits = 1))) %>%
+  rename(`Predicted deaths at Day 24 per 100,000 population` = fit,
+         `Predicted deaths at Day 24 (95% CI)` = ci) %>%
+  select(-lwr, -upr)
+
+results_table %>% pander::pander(paste0("Results Table 1: Daily rate of increase of deaths and cases per capita for each country analysed. The United Kingdom shows a daily rate of increase in the number of deaths per 100,000 population of ", (results_table %>% filter(Country.Region == "United Kingdom") %>% pull(`Daily increases in Deaths per 100,000 population (%)`)), "%, based on our model."))
+```
